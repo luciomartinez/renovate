@@ -205,7 +205,7 @@ describe('workers/repository/process/lookup/filter-checks', () => {
       expect(res.release?.version).toBe('1.0.3');
     });
 
-    describe('if internalChecksFilter=strict, minimumReleaseAge is specified, and the latest release does not have a releaseTimestamp', async () => {
+    describe('if internalChecksFilter=strict, minimumReleaseAge is specified, and the latest release does not have a releaseTimestamp', () => {
       beforeEach(() => {
         // NOTE that we need to reset the existing test set up to make sure that we call `getElapsedMs` in the right order
         dateUtil.getElapsedMs.mockReset();
