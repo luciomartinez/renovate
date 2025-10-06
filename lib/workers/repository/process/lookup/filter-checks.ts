@@ -1,5 +1,7 @@
 import is from '@sindresorhus/is';
 import { mergeChildConfig } from '../../../../config';
+import type { MinimumReleaseAgeTimestamp } from '../../../../config/types';
+import { isMinimumReleaseAgeTimestamp } from '../../../../config/types';
 import { logger } from '../../../../logger';
 import type { Release } from '../../../../modules/datasource';
 import { postprocessRelease } from '../../../../modules/datasource/postprocess-release';
@@ -67,21 +69,50 @@ export async function filterInternalChecks(
       // Now check for a minimumReleaseAge config
       const { minimumConfidence, minimumReleaseAge, updateType } =
         releaseConfig;
-      if (
-        is.nonEmptyString(minimumReleaseAge) &&
-        candidateRelease.releaseTimestamp
-      ) {
+      if (is.nonEmptyString(minimumReleaseAge)) {
+        let minimumReleaseAgeTimestamp: MinimumReleaseAgeTimestamp = 'required';
         if (
-          getElapsedMs(candidateRelease.releaseTimestamp) <
-          coerceNumber(toMs(minimumReleaseAge), 0)
+          isMinimumReleaseAgeTimestamp(releaseConfig.minimumReleaseAgeTimestamp)
         ) {
-          // Skip it if it doesn't pass checks
+          minimumReleaseAgeTimestamp = releaseConfig.minimumReleaseAgeTimestamp;
+        }
+
+        // if there is a releaseTimestamp, regardless of `minimumReleaseAgeTimestamp`, we should process it
+        if (candidateRelease.releaseTimestamp) {
+          // we should skip this if we have a timestamp that isn't passing checks:
+          if (
+            getElapsedMs(candidateRelease.releaseTimestamp) <
+            coerceNumber(toMs(minimumReleaseAge), 0)
+          ) {
+            // Skip it if it doesn't pass checks
+            logger.trace(
+              { depName, check: 'minimumReleaseAge' },
+              `Release ${candidateRelease.version} is pending status checks`,
+            );
+            pendingReleases.unshift(candidateRelease);
+            continue;
+          }
+        } // or if there is no timestamp, and we're running in `minimumReleaseAgeTimestamp=required`
+        else if (
+          is.nullOrUndefined(candidateRelease.releaseTimestamp) &&
+          minimumReleaseAgeTimestamp === 'required'
+        ) {
+          // Skip it, as we require a timestamp
           logger.trace(
             { depName, check: 'minimumReleaseAge' },
-            `Release ${candidateRelease.version} is pending status checks`,
+            `Release ${candidateRelease.version} did not have a releaseTimestamp, and as we're running with minimumReleaseAgeTimestamp=required, this release will be marked as pending status checks`,
           );
           pendingReleases.unshift(candidateRelease);
           continue;
+        } // if there is no timestamp, and we're running in `optional` mode, we can allow it
+        else if (
+          is.nullOrUndefined(candidateRelease.releaseTimestamp) &&
+          minimumReleaseAgeTimestamp === 'optional'
+        ) {
+          logger.trace(
+            { depName, check: 'minimumReleaseAge' },
+            `Release ${candidateRelease.version} did not have a releaseTimestamp, but as we're running with minimumReleaseAgeTimestamp=optional, proceeding`,
+          );
         }
       }
 
